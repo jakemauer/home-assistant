@@ -34,6 +34,7 @@ from .aiomeshtastic.errors import MeshRoutingError, MeshtasticError
 from .aiomeshtastic.protobuf import portnums_pb2
 from .const import (
     CONF_CONNECTION_BLUETOOTH_ADDRESS,
+    CONF_CONNECTION_BLUETOOTH_PIN,
     CONF_CONNECTION_SERIAL_PORT,
     CONF_CONNECTION_TCP_HOST,
     CONF_CONNECTION_TCP_PORT,
@@ -112,7 +113,8 @@ class MeshtasticApiClient:
                 from homeassistant.components.bluetooth import async_ble_device_from_address
 
                 ble_device = async_ble_device_from_address(hass, ble_address, connectable=True)
-            connection = AioBluetoothConnection(ble_address=ble_address, ble_device=ble_device)
+            ble_pin = data.get(CONF_CONNECTION_BLUETOOTH_PIN)
+            connection = AioBluetoothConnection(ble_address=ble_address, ble_device=ble_device, pin=ble_pin)
         elif connection_type == ConnectionType.SERIAL.value:
             connection = AioSerialConnection(device=data[CONF_CONNECTION_SERIAL_PORT])
         else:

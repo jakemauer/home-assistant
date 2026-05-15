@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 
 import asyncio
+import logging
 import struct
 from collections.abc import AsyncGenerator
 from contextlib import suppress
@@ -24,6 +25,13 @@ from .errors import (
 if TYPE_CHECKING:
     from bleak.backends.service import BleakGATTService
 
+_LOGGER = logging.getLogger(__name__)
+
+BLUEZ_SERVICE = "org.bluez"
+AGENT_MANAGER_IFACE = "org.bluez.AgentManager1"
+AGENT_IFACE = "org.bluez.Agent1"
+AGENT_PATH = "/org/meshtastic/agent"
+
 
 class BluetoothConnectionError(ClientApiConnectionError):
     pass
@@ -32,6 +40,74 @@ class BluetoothConnectionError(ClientApiConnectionError):
 class BluetoothConnectionServiceNotFoundError:
     def __init__(self) -> None:
         super().__init__("Bluetooth meshtastic service not found")
+
+
+class _BluezPairingAgent:
+    """BlueZ D-Bus pairing agent that provides a fixed passkey."""
+
+    def __init__(self, pin: int, bus: Any, agent_path: str = AGENT_PATH) -> None:
+        self._pin = pin
+        self._bus = bus
+        self._agent_path = agent_path
+        self._interface = None
+
+    async def register(self) -> None:
+        from dbus_fast.service import ServiceInterface, method
+
+        pin = self._pin
+        agent_path = self._agent_path
+
+        class AgentInterface(ServiceInterface):
+            def __init__(self) -> None:
+                super().__init__(AGENT_IFACE)
+
+            @method()
+            def Release(self) -> None:  # noqa: N802
+                pass
+
+            @method()
+            def RequestPasskey(self, device: "o") -> "u":  # noqa: N802, F821
+                _LOGGER.info("Providing passkey for device %s", device)
+                return pin
+
+            @method()
+            def RequestConfirmation(self, device: "o", passkey: "u") -> None:  # noqa: N802, F821
+                _LOGGER.info("Auto-confirming pairing for device %s", device)
+
+            @method()
+            def RequestAuthorization(self, device: "o") -> None:  # noqa: N802, F821
+                pass
+
+            @method()
+            def AuthorizeService(self, device: "o", uuid: "s") -> None:  # noqa: N802, F821
+                pass
+
+            @method()
+            def Cancel(self) -> None:  # noqa: N802
+                pass
+
+        self._interface = AgentInterface()
+        self._bus.export(agent_path, self._interface)
+
+        introspection = await self._bus.introspect(BLUEZ_SERVICE, "/org/bluez")
+        proxy = self._bus.get_proxy_object(BLUEZ_SERVICE, "/org/bluez", introspection)
+        agent_manager = proxy.get_interface(AGENT_MANAGER_IFACE)
+        await agent_manager.call_register_agent(agent_path, "KeyboardDisplay")
+        await agent_manager.call_request_default_agent(agent_path)
+        _LOGGER.debug("Registered BlueZ pairing agent at %s", agent_path)
+
+    async def unregister(self) -> None:
+        try:
+            introspection = await self._bus.introspect(BLUEZ_SERVICE, "/org/bluez")
+            proxy = self._bus.get_proxy_object(BLUEZ_SERVICE, "/org/bluez", introspection)
+            agent_manager = proxy.get_interface(AGENT_MANAGER_IFACE)
+            await agent_manager.call_unregister_agent(self._agent_path)
+        except Exception:
+            _LOGGER.debug("Failed to unregister pairing agent", exc_info=True)
+        if self._interface is not None:
+            self._bus.unexport(self._agent_path, self._interface)
+        self._bus.disconnect()
+        _LOGGER.debug("Unregistered BlueZ pairing agent")
 
 
 class BluetoothConnection(ClientApiConnection):
@@ -47,12 +123,14 @@ class BluetoothConnection(ClientApiConnection):
         ble_device: Any | None = None,
         bleak_client_backend: type[BaseBleakClient] | None = None,
         connect_timeout: float = 10.0,
+        pin: int | None = None,
     ) -> None:
         super().__init__()
         self._ble_address = ble_address
         self._ble_device = ble_device
         self._bleak_client_backend = bleak_client_backend
         self._connect_timeout = connect_timeout
+        self._pin = pin
         self._ble_meshtastic_service: BleakGATTService | None = None
         self._ble_from_radio: BleakGATTCharacteristic | None
         self._ble_to_radio: BleakGATTCharacteristic | None
@@ -63,27 +141,41 @@ class BluetoothConnection(ClientApiConnection):
         self._force_read_event = asyncio.Event()
 
     async def _connect(self) -> None:
-        if self._ble_device is not None:
-            self._bleak_client = await establish_connection(
-                client_class=BleakClient,
-                device=self._ble_device,
-                name=self._ble_address,
-                max_attempts=3,
-            )
-        else:
-            self._bleak_client = BleakClient(
-                self._ble_address, timeout=self._connect_timeout, backend=self._bleak_client_backend
-            )
-            await self._bleak_client.connect()
+        pairing_agent = None
 
-        # attempt pairing, we don't know if it is required. Should not harm if
-        # not needed. if pairing is required, external input is necessary as we are not
-        # able to fully pair with bleak see https://github.com/hbldh/bleak/issues/1434.
-        # possible workaround: https://technotes.kynetics.com/2018/pairing_agents_bluez/
+        if self._pin is not None:
+            try:
+                pairing_agent = await self._register_pairing_agent()
+            except Exception:
+                self._logger.warning(
+                    "Failed to register D-Bus pairing agent; pairing with PIN may fail",
+                    exc_info=True,
+                )
+
         try:
-            await self._bleak_client.pair()
-        except:  # noqa: E722
-            self._logger.debug("Pairing failed", exc_info=True)
+            if self._ble_device is not None:
+                self._bleak_client = await establish_connection(
+                    client_class=BleakClient,
+                    device=self._ble_device,
+                    name=self._ble_address,
+                    max_attempts=3,
+                )
+            else:
+                self._bleak_client = BleakClient(
+                    self._ble_address, timeout=self._connect_timeout, backend=self._bleak_client_backend
+                )
+                await self._bleak_client.connect()
+
+            try:
+                await self._bleak_client.pair()
+            except Exception:
+                if self._pin is not None:
+                    self._logger.warning("Pairing with PIN failed", exc_info=True)
+                else:
+                    self._logger.debug("Pairing failed (no PIN configured)", exc_info=True)
+        finally:
+            if pairing_agent is not None:
+                await pairing_agent.unregister()
 
         self._ble_meshtastic_service = self._bleak_client.services[BluetoothConnection.BTM_SERVICE_UUID]
 
@@ -106,6 +198,17 @@ class BluetoothConnection(ClientApiConnection):
             await self._bleak_client.disconnect()
         except:  # noqa: E722
             self._logger.debug("Disconnecting failed", exc_info=True)
+
+    async def _register_pairing_agent(self) -> _BluezPairingAgent:
+        from dbus_fast import BusType
+        from dbus_fast.aio import MessageBus
+
+        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+        safe_addr = self._ble_address.replace(":", "_")
+        agent_path = f"{AGENT_PATH}/{safe_addr}"
+        agent = _BluezPairingAgent(self._pin, bus, agent_path)
+        await agent.register()
+        return agent
 
     @property
     def is_connected(self) -> bool:
