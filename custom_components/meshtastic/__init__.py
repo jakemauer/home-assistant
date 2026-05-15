@@ -57,6 +57,7 @@ from .const import (
 )
 from .coordinator import MeshtasticDataUpdateCoordinator
 from .data import DATA_COMPONENT, MeshtasticConfigEntry, MeshtasticData
+from homeassistant.util.hass_dict import HassKey
 from .entity import (
     GatewayChannelEntity,
     GatewayDirectMessageEntity,
@@ -78,12 +79,13 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.D
 
 SCAN_INTERVAL = datetime.timedelta(hours=1)
 
+DATA_WEB_STATE: HassKey[dict[str, bool]] = HassKey(f"{DOMAIN}_web_state")
 
 _remove_listeners: MutableMapping[str, list[Callable[[], None]]] = defaultdict(list)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    hass.data.setdefault(DOMAIN, {})
+    hass.data[DATA_WEB_STATE] = {}
     hass.data[DATA_COMPONENT] = EntityComponent[MeshtasticEntity](LOGGER, DOMAIN, hass, SCAN_INTERVAL)
 
     await services.async_setup_services(hass)
@@ -92,7 +94,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_meshtastic_web(hass: HomeAssistant) -> bool:
-    domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data = hass.data.setdefault(DATA_WEB_STATE, {})
     if domain_data.get("meshtastic_web_loaded", False):
         return True
 
@@ -108,7 +110,7 @@ async def async_setup_meshtastic_web(hass: HomeAssistant) -> bool:
 
 
 async def async_unload_meshtastic_web(hass: HomeAssistant) -> bool:
-    domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data = hass.data.setdefault(DATA_WEB_STATE, {})
     if not domain_data.get("meshtastic_web_loaded", False):
         return True
 
