@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: 2025 Ylian Saint-Hilaire @ylianst
 SPDX-License-Identifier: MIT
 -->
 
-# Home-Assistant Meshtastic Integration
+# Home-Assistant Meshtastic Integration Fork
 
 [![GitHub Release][releases-shield]][releases]
 [![License][license-shield]](LICENSE)
