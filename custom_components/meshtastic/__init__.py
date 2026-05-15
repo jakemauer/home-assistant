@@ -27,7 +27,6 @@ from homeassistant.const import (
     Platform,
 )
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceConnectionCollisionError
@@ -77,9 +76,6 @@ if TYPE_CHECKING:
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.DEVICE_TRACKER, Platform.NOTIFY]
 
-ENTITY_ID_FORMAT = DOMAIN + ".{}"
-PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA
-PLATFORM_SCHEMA_BASE = cv.PLATFORM_SCHEMA_BASE
 SCAN_INTERVAL = datetime.timedelta(hours=1)
 
 
@@ -87,9 +83,8 @@ _remove_listeners: MutableMapping[str, list[Callable[[], None]]] = defaultdict(l
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    component = hass.data[DATA_COMPONENT] = EntityComponent[MeshtasticEntity](LOGGER, DOMAIN, hass, SCAN_INTERVAL)
+    hass.data[DATA_COMPONENT] = EntityComponent[MeshtasticEntity](LOGGER, DOMAIN, hass, SCAN_INTERVAL)
 
-    await component.async_setup(config)
     await services.async_setup_services(hass)
 
     return True
