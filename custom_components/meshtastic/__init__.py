@@ -83,6 +83,7 @@ _remove_listeners: MutableMapping[str, list[Callable[[], None]]] = defaultdict(l
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    hass.data.setdefault(DOMAIN, {})
     hass.data[DATA_COMPONENT] = EntityComponent[MeshtasticEntity](LOGGER, DOMAIN, hass, SCAN_INTERVAL)
 
     await services.async_setup_services(hass)
@@ -91,13 +92,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 async def async_setup_meshtastic_web(hass: HomeAssistant) -> bool:
-    if hass.data[DOMAIN].config.get("meshtastic_web_loaded", False):
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if domain_data.get("meshtastic_web_loaded", False):
         return True
 
     try:
         await meshtastic_web.async_setup(hass)
         await frontend.async_register_frontend(hass)
-        hass.data[DOMAIN].config["meshtastic_web_loaded"] = True
+        domain_data["meshtastic_web_loaded"] = True
     except:  # noqa: E722
         LOGGER.warning("Failed to setup frontend", exc_info=True)
         return False
@@ -106,12 +108,13 @@ async def async_setup_meshtastic_web(hass: HomeAssistant) -> bool:
 
 
 async def async_unload_meshtastic_web(hass: HomeAssistant) -> bool:
-    if not hass.data[DOMAIN].config.get("meshtastic_web_loaded", False):
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if not domain_data.get("meshtastic_web_loaded", False):
         return True
 
     try:
         await frontend.async_unregister_frontend(hass)
-        hass.data[DOMAIN].config["meshtastic_web_loaded"] = False
+        domain_data["meshtastic_web_loaded"] = False
     except:  # noqa: E722
         LOGGER.warning("Failed to unload frontend", exc_info=True)
         return False
