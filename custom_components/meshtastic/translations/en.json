@@ -26,18 +26,25 @@
         }
       },
       "manual_bluetooth": {
-        "description": "Connect Device via Bluetooth.\n**IMPORTANT**: PIN is not supported, please remove it first.\n\nPlease be patient, initial setup takes a while when device has a large node db",
+        "description": "Connect Device via Bluetooth.\n\nPlease be patient, initial setup takes a while when device has a large node db",
         "data": {
-          "bluetooth_address": "Bluetooth Address"
+          "bluetooth_address": "Bluetooth Address",
+          "bluetooth_pin": "PIN Code"
         },
         "data_description": {
-          "bluetooth_address": "Device address in form of 00:11:22:33:FF:EE"
+          "bluetooth_address": "Device address in form of 00:11:22:33:FF:EE",
+          "bluetooth_pin": "6-digit PIN if your device has one configured (leave empty for no PIN)"
         }
       },
       "discovery_bluetooth_confirm": {
-        "description": "Connect Device via Bluetooth.\n**IMPORTANT**: PIN is not supported, please remove it first.\n\nPlease be patient, initial setup takes a while when device has a large node db",
+        "description": "Connect Device via Bluetooth.\n\nPlease be patient, initial setup takes a while when device has a large node db",
         "data": {
-          "bluetooth_address": "Bluetooth Address"
+          "bluetooth_address": "Bluetooth Address",
+          "bluetooth_pin": "PIN Code"
+        },
+        "data_description": {
+          "bluetooth_address": "Device address in form of 00:11:22:33:FF:EE",
+          "bluetooth_pin": "6-digit PIN if your device has one configured (leave empty for no PIN)"
         }
       },
       "manual_serial": {

@@ -26,6 +26,7 @@ from .api import (
 )
 from .const import (
     CONF_CONNECTION_BLUETOOTH_ADDRESS,
+    CONF_CONNECTION_BLUETOOTH_PIN,
     CONF_CONNECTION_SERIAL_PORT,
     CONF_CONNECTION_TCP_HOST,
     CONF_CONNECTION_TCP_PORT,
@@ -77,12 +78,19 @@ def _step_user_data_connection_tcp_schema_factory(host: str = "", port: int | No
     )
 
 
-def _step_user_data_connection_bluetooth_schema_factory(address: str = "") -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_CONNECTION_BLUETOOTH_ADDRESS, default=address): cv.string,
-        }
-    )
+def _step_user_data_connection_bluetooth_schema_factory(address: str = "", pin: int | None = None) -> vol.Schema:
+    schema = {
+        vol.Required(CONF_CONNECTION_BLUETOOTH_ADDRESS, default=address): cv.string,
+    }
+    if pin is not None:
+        schema[vol.Optional(CONF_CONNECTION_BLUETOOTH_PIN, default=pin)] = vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=999999)
+        )
+    else:
+        schema[vol.Optional(CONF_CONNECTION_BLUETOOTH_PIN)] = vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=999999)
+        )
+    return vol.Schema(schema)
 
 
 def _step_user_data_connection_serial_schema_factory(device: str = "") -> vol.Schema:
@@ -321,7 +329,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="manual_bluetooth",
             data_schema=_step_user_data_connection_bluetooth_schema_factory(
-                self.data.get(CONF_CONNECTION_BLUETOOTH_ADDRESS)
+                self.data.get(CONF_CONNECTION_BLUETOOTH_ADDRESS),
+                self.data.get(CONF_CONNECTION_BLUETOOTH_PIN),
             ),
             errors=errors,
         )
@@ -387,7 +396,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="discovery_bluetooth_confirm",
             data_schema=_step_user_data_connection_bluetooth_schema_factory(
-                self.data.get(CONF_CONNECTION_BLUETOOTH_ADDRESS)
+                self.data.get(CONF_CONNECTION_BLUETOOTH_ADDRESS),
+                self.data.get(CONF_CONNECTION_BLUETOOTH_PIN),
             ),
             description_placeholders=self.context["title_placeholders"],
             errors=errors,
